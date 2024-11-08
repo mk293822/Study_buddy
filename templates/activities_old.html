@@ -1,0 +1,12 @@
+<div class="activities-container">
+    <h3>RECENT ACTIVITIES</h3>
+    {% for message in messages %}
+    <small>@{{message.user.username}}</small>
+    <small>{{message.updated|timesince}}</small>
+    <small>Replied to {{message.room.name}}s</small>
+    {% if request.user == message.user %}
+    <a href="{% url 'delete-message' message.id %}">Delete</a>
+    {% endif %}
+    <p>{{message}}</p>
+    {% endfor %}
+</div>

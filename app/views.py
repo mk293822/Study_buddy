@@ -7,19 +7,21 @@ from .forms import RoomCreationForm, MyUserCreationform, UserForm
 
 def home_viw(request):
     q = request.GET.get('q') if request.GET.get('q') != None else ''
-    topics = Topics.objects.all()
-    
-    messages = Messages.objects.filter(
-        Q(room__name__icontains=q) |
-        Q(user__name__icontains=q) |
-        Q(body__icontains=q)
-    )
     rooms = Rooms.objects.filter(
         Q(name__icontains=q) |
         Q(topic__name__icontains=q) |
         Q(host__name__icontains=q) |
         Q(description__icontains=q)
     )
+    messages = Messages.objects.filter(
+        Q(room__name__icontains=q) |
+        Q(user__name__icontains=q) |
+        Q(body__icontains=q)
+    )[0:rooms.count()]
+    topics = Topics.objects.all()[0:rooms.count() * 3]
+    for topic in topics:
+        if topic.room.count == 0:
+            topic.delete()
     context = {
         'topics': topics,
         'messages': messages,
@@ -31,12 +33,48 @@ def home_viw(request):
 def room_details(request, pk):
     room = Rooms.objects.get(id=pk)
     messages = Messages.objects.filter(room=room)
-
+    participants = room.participants.all()
     if request.method == 'POST':
         body = request.POST['body']
         Messages.objects.create(body=body, room=room, user=request.user)
         room.participants.add(request.user)
-    return render(request, 'room_details.html', {'room': room, 'messages': messages})
+    return render(request, 'room_details.html', {'room': room, 'messages': messages, 'participants': participants})
+
+
+@login_required(login_url='login')
+def room_update_view(request, pk):
+    room = Rooms.objects.get(id=pk)
+    form = RoomCreationForm(initial={
+        'name': room.name,
+        'topic': room.topic.name,
+        'description': room.description
+    })
+    if request.method == 'POST':
+        topic_name = request.POST.get('topic')
+        topic, created = Topics.objects.get_or_create(name=topic_name)
+        room.delete()
+        room, created= Rooms.objects.get_or_create(
+            topic=topic,
+            host=request.user,
+            name=request.POST.get('name'), 
+            description=request.POST.get('description'))
+        return redirect('home')
+    topics = Topics.objects.all()
+    context = {
+        'form':form,
+        'topics':topics
+    }
+    return render(request, 'room-update.html', context)
+
+
+def topic_details(request):
+    q = request.GET.get('q') if request.GET.get('q') != None else ''
+    topics = Topics.objects.filter(Q(name__icontains=q))
+   
+    context = {
+        'topics': topics
+    }
+    return render(request, 'topic_details.html', context)
 
 
 @login_required(login_url="login")
@@ -63,6 +101,7 @@ def delete_message(request, pk):
 
 @login_required(login_url='login')
 def room_create(request):
+    rooms = Rooms.objects.all()
     form = RoomCreationForm()
     if request.method == 'POST':
         topic, created = Topics.objects.get_or_create(name=request.POST.get('topic'))
@@ -71,6 +110,7 @@ def room_create(request):
         return redirect('home')
     context ={
         'form': form,
+        'rooms':rooms
     }
     return render(request, 'room_create.html', context)
 
@@ -95,6 +135,8 @@ def signup_view(request):
             user.save()
             login(request, user)
             return redirect('home')
+        else:
+            print('Error something')
     context = {'form': form}
     return render(request, 'signup.html', context)
 
